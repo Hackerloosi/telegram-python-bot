@@ -120,7 +120,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Sim : {person.get('CIRCLE/SIM','')}\n"
             f"Mobile No. : {person.get('MOBILE','')}\n"
             f"Alternative No. : {person.get('ALTERNATIVE_MOBILE','')}\n"
-            f"ID No. : {person.get('AADHAR_NUMBER','')}\n"
+            f"Aadhaar No. : {person.get('AADHAR_NUMBER','')}\n"
             f"Email ID : {email}\n\n"
         )
 
