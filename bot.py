@@ -1,12 +1,7 @@
-import os
 import json
 import requests
-
 from telegram import (
     Update,
-    BotCommand,
-    BotCommandScopeChat,
-    BotCommandScopeDefault,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
@@ -19,8 +14,9 @@ from telegram.ext import (
     filters,
 )
 
-# ================= CONFIG =================
+# ================= BASIC CONFIG =================
 
+BOT_TOKEN = "PUT_YOUR_REAL_BOT_TOKEN_HERE"
 ADMIN_ID = 1609002531
 API_URL = "https://giga-seven.vercel.app/api?key=NIGHTFALLHUB&num="
 
@@ -28,7 +24,7 @@ APPROVED_FILE = "approved_users.json"
 PENDING_FILE = "pending_users.json"
 BANNED_FILE = "banned_users.json"
 
-# ================= STORAGE =================
+# ================= FILE STORAGE =================
 
 def load_json(file):
     try:
@@ -45,11 +41,10 @@ approved_users = load_json(APPROVED_FILE)
 pending_users = load_json(PENDING_FILE)
 banned_users = load_json(BANNED_FILE)
 
-def user_text(uid, info):
-    name = info.get("name", "Unknown")
-    username = info.get("username")
-    uname = f"@{username}" if username else "NoUsername"
-    return f"{name} ({uname})\nID: {uid}"
+# ================= HELPERS =================
+
+def get_username(user):
+    return f"@{user.username}" if user.username else "@NoUsername"
 
 # ================= START =================
 
@@ -57,287 +52,174 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     uid = str(user.id)
 
-    status = (
-        "🤖 Bot Status: ONLINE 🟢\n"
-        "⚡ Service: Active\n\n"
-    )
-
-    # BANNED
     if uid in banned_users:
-        await update.message.reply_text("🚫 You are banned from using this bot.")
+        await update.message.reply_text("🚫 You are banned.")
         return
 
-    # ADMIN
-    if user.id == ADMIN_ID:
+    if uid in approved_users or user.id == ADMIN_ID:
         await update.message.reply_text(
-            status +
-            "📱 Please Send Mobile No.\n"
-            "Without +91\n"
-            "In 10 Digit\n\n"
-            "[ Note : Only Indian No. Allowed ]"
+            "📱 Send 10-digit Indian mobile number\n"
+            "🤖 Bot Status: ONLINE 🟢"
         )
         return
 
-    # APPROVED USER
-    if uid in approved_users:
-        await update.message.reply_text(
-            status +
-            "📱 Please Send Mobile No.\n"
-            "Without +91\n"
-            "In 10 Digit\n\n"
-            "[ Note : Only Indian No. Allowed ]"
-        )
-        return
-
-    # NEW / PENDING USER
     if uid not in pending_users:
         pending_users[uid] = {
-            "name": user.full_name,
+            "name": user.first_name,
             "username": user.username
         }
         save_json(PENDING_FILE, pending_users)
 
-        # Notify admin only once
         await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=(
-                "🔔 New User Approval Request\n\n"
-                f"{user_text(uid, pending_users[uid])}\n\n"
-                f"Approve using:\n/approve {uid}"
-            )
+            ADMIN_ID,
+            f"🔔 New Approval Request\n\n"
+            f"{user.first_name} ({get_username(user)})\n"
+            f"ID: {user.id}\n\n"
+            f"Approve using:\n/approve {user.id}"
         )
 
-    # Always show waiting message until approved
     await update.message.reply_text(
-        status +
-        "⏳ Awaiting for approval from owner...\n"
-        "🕒 Please wait, you will be notified once approved."
+        "⏳ Awaiting approval from owner…"
     )
 
-# ================= ADMIN =================
+# ================= APPROVE =================
 
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID or not context.args:
         return
 
     uid = context.args[0]
+    user = pending_users.pop(uid, None)
 
-    if uid not in pending_users:
-        await update.message.reply_text("User not found in pending list.")
-        return
-
-    approved_users[uid] = pending_users[uid]
-    pending_users.pop(uid)
-
-    save_json(APPROVED_FILE, approved_users)
-    save_json(PENDING_FILE, pending_users)
-
-    await update.message.reply_text(
-        f"✅ Approved:\n{user_text(uid, approved_users[uid])}"
-    )
-
-    # Notify user
-    await context.bot.send_message(
-        chat_id=int(uid),
-        text=(
-            "✅ Owner approved you!\n\n"
-            "🎉 Now you can use this bot.\n"
-            "📱 Send /start to begin."
-        )
-    )
-
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or not context.args:
-        return
-
-    uid = context.args[0]
-
-    info = approved_users.pop(uid, None) or pending_users.pop(uid, None)
-    if not info:
+    if not user:
         await update.message.reply_text("User not found.")
         return
 
-    banned_users[uid] = info
-
+    approved_users[uid] = user
     save_json(APPROVED_FILE, approved_users)
     save_json(PENDING_FILE, pending_users)
-    save_json(BANNED_FILE, banned_users)
 
     await update.message.reply_text(
-        f"🚫 Banned:\n{user_text(uid, info)}"
+        f"✅ Approved:\n"
+        f"{user['name']} (@{user.get('username') or 'NoUsername'})\n"
+        f"ID: {uid}"
     )
 
-async def approved_list(update, context):
+    await context.bot.send_message(
+        int(uid),
+        "✅ Owner approved you!\nSend /start"
+    )
+
+# ================= ADMIN PANEL =================
+
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    if not approved_users:
-        await update.message.reply_text("No approved users.")
-        return
-
-    msg = "✅ Approved Users:\n\n"
-    for uid, info in approved_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
-
-async def pending_list(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not pending_users:
-        await update.message.reply_text("No pending users.")
-        return
-
-    msg = "⏳ Pending Users:\n\n"
-    for uid, info in pending_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
-
-# ================= DELETE USER (RESET) =================
-
-async def delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    all_users = {}
-    all_users.update(approved_users)
-    all_users.update(pending_users)
-    all_users.update(banned_users)
-
-    if not all_users:
-        await update.message.reply_text("No users found.")
-        return
-
-    buttons = []
-    for uid, info in all_users.items():
-        label = f"{info.get('name','User')} (@{info.get('username','NA')})"
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"Delete {label}",
-                callback_data=f"delete:{uid}"
-            )
-        ])
+    keyboard = [
+        [InlineKeyboardButton("🗑 Delete User", callback_data="delete_menu")]
+    ]
 
     await update.message.reply_text(
-        "🗑️ Delete User (Reset to New):",
-        reply_markup=InlineKeyboardMarkup(buttons)
+        "👑 Admin Panel",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= DELETE USER =================
+
+async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    uid = query.data.split(":")[1]
+    if query.data == "delete_menu":
+        if not approved_users:
+            await query.edit_message_text("No approved users.")
+            return
 
-    approved_users.pop(uid, None)
-    pending_users.pop(uid, None)
-    banned_users.pop(uid, None)
+        buttons = []
+        for uid, info in approved_users.items():
+            uname = f"@{info['username']}" if info.get("username") else "@NoUsername"
+            buttons.append([
+                InlineKeyboardButton(
+                    f"{info['name']} ({uname})",
+                    callback_data=f"delete_{uid}"
+                )
+            ])
 
-    save_json(APPROVED_FILE, approved_users)
-    save_json(PENDING_FILE, pending_users)
-    save_json(BANNED_FILE, banned_users)
-
-    await query.edit_message_text(
-        f"🗑️ User deleted\nID: {uid}\n\n🔄 User is now NEW again."
-    )
-
-    # Notify user (optional)
-    try:
-        await context.bot.send_message(
-            chat_id=int(uid),
-            text=(
-                "♻️ Your access was reset by owner.\n\n"
-                "⏳ Send /start again to request approval."
-            )
+        await query.edit_message_text(
+            "🗑 Select user to delete:",
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except:
-        pass
 
-# ================= MESSAGE HANDLER =================
+    elif query.data.startswith("delete_"):
+        uid = query.data.split("_")[1]
+
+        approved_users.pop(uid, None)
+        pending_users.pop(uid, None)
+        banned_users.pop(uid, None)
+
+        save_json(APPROVED_FILE, approved_users)
+        save_json(PENDING_FILE, pending_users)
+        save_json(BANNED_FILE, banned_users)
+
+        await query.edit_message_text(
+            f"🗑 User deleted\nID: {uid}\n"
+            f"User must request approval again."
+        )
+
+# ================= NUMBER SEARCH =================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
 
     if uid not in approved_users and update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⏳ Awaiting approval…")
         return
 
-    number = update.message.text.strip()
+    text = update.message.text.strip()
 
-    if not number.isdigit() or len(number) != 10:
-        await update.message.reply_text("❌ Send valid 10-digit Indian number.")
+    if not text.isdigit() or len(text) != 10:
+        await update.message.reply_text("❌ Invalid number.")
         return
 
-    await update.message.reply_text("🔍 Fetching details, please wait...")
+    await update.message.reply_text("🔍 Searching…")
 
     try:
-        data = requests.get(API_URL + number, timeout=15).json()
+        res = requests.get(API_URL + text, timeout=10).json()
     except:
         await update.message.reply_text("❌ API error.")
         return
 
-    if not data.get("success") or not data.get("result"):
+    if not res.get("success"):
         await update.message.reply_text("❌ No data found.")
         return
 
     msg = ""
-    for i, p in enumerate(data["result"], 1):
-        email = p.get("EMAIL", "").strip().lower()
-        email_text = email if email else "Email Not Found ❌"
-
+    for i, p in enumerate(res["result"], 1):
+        email = p.get("EMAIL") or "Email Not Found ❌"
         msg += (
-            f"👤 Person {i} Details\n"
-            f"Name : {p.get('NAME','')}\n"
-            f"Father Name : {p.get('FATHER_NAME','')}\n"
-            f"Address : {p.get('ADDRESS','').replace('!', ', ')}\n"
-            f"Sim : {p.get('CIRCLE/SIM','')}\n"
-            f"Mobile No. : {p.get('MOBILE','')}\n"
-            f"Alternative No. : {p.get('ALTERNATIVE_MOBILE','')}\n"
-            f"Aadhaar No. : {p.get('AADHAR_NUMBER','')}\n"
-            f"Email ID : {email_text}\n\n"
+            f"👤 Person {i}\n"
+            f"Name: {p.get('NAME','')}\n"
+            f"Mobile: {p.get('MOBILE','')}\n"
+            f"Aadhaar No: {p.get('AADHAR_NUMBER','')}\n"
+            f"Email: {email}\n\n"
         )
 
     msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
     await update.message.reply_text(msg)
 
-# ================= COMMAND MENU =================
-
-async def set_admin_commands(app):
-    # Normal users
-    await app.bot.set_my_commands(
-        [BotCommand("start", "Start the bot")],
-        scope=BotCommandScopeDefault()
-    )
-
-    # Admin only
-    await app.bot.set_my_commands(
-        [
-            BotCommand("approve", "Approve user"),
-            BotCommand("ban", "Ban user"),
-            BotCommand("delete", "Delete / reset user"),
-            BotCommand("approved", "Approved users"),
-            BotCommand("pending", "Pending users"),
-        ],
-        scope=BotCommandScopeChat(chat_id=ADMIN_ID)
-    )
-
 # ================= MAIN =================
 
 def main():
-    token = os.environ.get("BOT_TOKEN")
-    app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("approve", approve))
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("delete", delete_user))
-    app.add_handler(CommandHandler("approved", approved_list))
-    app.add_handler(CommandHandler("pending", pending_list))
-    app.add_handler(CallbackQueryHandler(delete_callback, pattern="^delete:"))
+    app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CallbackQueryHandler(callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    app.post_init = set_admin_commands
+    print("🤖 Bot is ONLINE 🟢")
     app.run_polling()
 
 if __name__ == "__main__":
