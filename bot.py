@@ -16,7 +16,7 @@ from telegram.ext import (
 
 # ================= BASIC CONFIG =================
 
-BOT_TOKEN = "PUT_YOUR_REAL_BOT_TOKEN_HERE"
+BOT_TOKEN = "8205122688:AAE48BND_nVDNfkIulK_GldTN3QTSUJF9r0"
 ADMIN_ID = 1609002531
 API_URL = "https://giga-seven.vercel.app/api?key=NIGHTFALLHUB&num="
 
