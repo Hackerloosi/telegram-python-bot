@@ -6,7 +6,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
 ADMIN_ID = 1609002531
@@ -80,7 +80,7 @@ async def approved_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for uid in approved_users:
         msg += f"• {uid}\n"
 
-    await update.message.toggle_text(msg)
+    await update.message.reply_text(msg)
 
 # ---------- MAIN ----------
 
