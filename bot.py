@@ -255,9 +255,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = ""
     for i, p in enumerate(data["result"], 1):
-        email_raw = p.get("EMAIL") or ""
-        email = str(email_raw).strip().lower()
-        email_text = email if email else "Email Not Found ❌"
+        email_raw = p.get("EMAIL")
+        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
 
         msg += (
             f"👤 Person {i} Details\n"
@@ -274,17 +273,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
     await update.message.reply_text(msg)
 
-# ================= COMMAND MENU FIXED =================
+# ================= COMMAND MENU =================
 
-async def setup_commands(application):
-    await application.bot.set_my_commands(
+async def set_admin_commands(app):
+    await app.bot.set_my_commands(
         [BotCommand("start", "Start the bot")],
         scope=BotCommandScopeDefault()
     )
 
-    await application.bot.set_my_commands(
+    await app.bot.set_my_commands(
         [
-            BotCommand("start", "Start the bot"),
             BotCommand("approve", "Approve user"),
             BotCommand("ban", "Ban user"),
             BotCommand("delete", "Delete / reset user"),
@@ -309,7 +307,7 @@ def main():
     app.add_handler(CallbackQueryHandler(delete_callback, pattern="^delete:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    app.post_init = setup_commands
+    app.post_init = set_admin_commands
     app.run_polling()
 
 if __name__ == "__main__":
