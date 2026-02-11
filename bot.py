@@ -244,17 +244,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        data = requests.get(API_URL + number, timeout=15).json()
+        response = requests.get(API_URL + number, timeout=15)
+        data = response.json()
     except:
         await update.message.reply_text("❌ API error.")
         return
 
-    if not data.get("success") or not data.get("result"):
+    # SAFE API VALIDATION
+    if not isinstance(data, dict):
+        await update.message.reply_text("❌ API error.")
+        return
+
+    if not data.get("success"):
+        await update.message.reply_text("❌ API error.")
+        return
+
+    results = data.get("result")
+
+    if not isinstance(results, list) or len(results) == 0:
         await update.message.reply_text("❌ No data found.")
         return
 
     msg = ""
-    for i, p in enumerate(data["result"], 1):
+    for i, p in enumerate(results, 1):
         email_raw = p.get("EMAIL")
         email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
 
