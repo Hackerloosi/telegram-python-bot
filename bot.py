@@ -284,7 +284,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        data = requests.get(API_URL + number, timeout=15).json()
+        data = requests.get(API_URL + number, timeout=30).json()
     except:
         await update.message.reply_text("❌ API error.")
         return
