@@ -250,7 +250,6 @@ async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
 
-    # ADMIN BROADCAST MESSAGE
     if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
@@ -297,7 +296,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = ""
     for i, p in enumerate(data["result"], 1):
         email_raw = p.get("EMAIL")
-email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
+        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
 
         msg += (
             f"👤 Person {i} Details\n"
