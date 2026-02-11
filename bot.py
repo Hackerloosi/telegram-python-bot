@@ -168,88 +168,12 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✍️ Send the message you want to broadcast to all approved users."
     )
 
-async def approved_list(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not approved_users:
-        await update.message.reply_text("No approved users.")
-        return
-
-    msg = "✅ Approved Users:\n\n"
-    for uid, info in approved_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
-
-async def pending_list(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not pending_users:
-        await update.message.reply_text("No pending users.")
-        return
-
-    msg = "⏳ Pending Users:\n\n"
-    for uid, info in pending_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
-
-# ================= DELETE USER =================
-
-async def delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    all_users = {}
-    all_users.update(approved_users)
-    all_users.update(pending_users)
-    all_users.update(banned_users)
-
-    if not all_users:
-        await update.message.reply_text("No users found.")
-        return
-
-    buttons = []
-    for uid, info in all_users.items():
-        uname = f"@{info['username']}" if info.get("username") else "NoUsername"
-        label = f"{info.get('name','User')} ({uname})"
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"Delete {label}",
-                callback_data=f"delete:{uid}"
-            )
-        ])
-
-    await update.message.reply_text(
-        "🗑️ Delete User (Reset to New):",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-
-async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    uid = query.data.split(":")[1]
-
-    approved_users.pop(uid, None)
-    pending_users.pop(uid, None)
-    banned_users.pop(uid, None)
-
-    save_json(APPROVED_FILE, approved_users)
-    save_json(PENDING_FILE, pending_users)
-    save_json(BANNED_FILE, banned_users)
-
-    await query.edit_message_text(
-        f"🗑️ User deleted\nID: {uid}\n\n🔄 User is now NEW again."
-    )
-
 # ================= MESSAGE HANDLER =================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
 
+    # Broadcast mode
     if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
@@ -284,19 +208,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        data = requests.get(API_URL + number, timeout=30).json()
+        response = requests.get(API_URL + number, timeout=30)
+        data = response.json()
     except:
         await update.message.reply_text("❌ API error.")
         return
 
-    if not data.get("success") or not data.get("result"):
+    if not isinstance(data, dict) or not data.get("success") or not data.get("result"):
         await update.message.reply_text("❌ No data found.")
         return
 
     msg = ""
     for i, p in enumerate(data["result"], 1):
         email_raw = p.get("EMAIL")
-        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
+        email_text = (
+            email_raw.strip().lower()
+            if isinstance(email_raw, str) and email_raw.strip()
+            else "Email Not Found ❌"
+        )
 
         msg += (
             f"👤 Person {i} Details\n"
@@ -326,9 +255,6 @@ async def set_admin_commands(app):
             BotCommand("admin", "Broadcast message"),
             BotCommand("approve", "Approve user"),
             BotCommand("ban", "Ban user"),
-            BotCommand("delete", "Delete / reset user"),
-            BotCommand("approved", "Approved users"),
-            BotCommand("pending", "Pending users"),
         ],
         scope=BotCommandScopeChat(chat_id=ADMIN_ID)
     )
@@ -343,10 +269,6 @@ def main():
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("delete", delete_user))
-    app.add_handler(CommandHandler("approved", approved_list))
-    app.add_handler(CommandHandler("pending", pending_list))
-    app.add_handler(CallbackQueryHandler(delete_callback, pattern="^delete:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.post_init = set_admin_commands
