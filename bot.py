@@ -51,10 +51,6 @@ def user_text(uid, info):
     uname = f"@{username}" if username else "NoUsername"
     return f"{name} ({uname})\nID: {uid}"
 
-# ================= BROADCAST FLAG =================
-
-ADMIN_BROADCAST_MODE = False
-
 # ================= START =================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,20 +150,6 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🚫 Banned:\n{user_text(uid, info)}"
     )
 
-# ================= ADMIN BROADCAST =================
-
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ADMIN_BROADCAST_MODE
-
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    ADMIN_BROADCAST_MODE = True
-    await update.message.reply_text(
-        "📢 Admin Broadcast Mode\n\n"
-        "✍️ Send the message you want to broadcast to all approved users."
-    )
-
 async def approved_list(update, context):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -248,29 +230,6 @@ async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= MESSAGE HANDLER =================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ADMIN_BROADCAST_MODE
-
-    # ADMIN BROADCAST MESSAGE
-    if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
-        ADMIN_BROADCAST_MODE = False
-        text = update.message.text
-
-        sent = 0
-        for uid in approved_users:
-            try:
-                await context.bot.send_message(
-                    chat_id=int(uid),
-                    text=f"📢 Announcement\n\n{text}"
-                )
-                sent += 1
-            except:
-                pass
-
-        await update.message.reply_text(
-            f"✅ Broadcast sent to {sent} approved users."
-        )
-        return
-
     uid = str(update.effective_user.id)
 
     if uid not in approved_users and update.effective_user.id != ADMIN_ID:
@@ -296,8 +255,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = ""
     for i, p in enumerate(data["result"], 1):
-        email = p.get("EMAIL", "").strip().lower()
-        email_text = email if email else "Email Not Found ❌"
+        email_raw = p.get("EMAIL")
+        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
 
         msg += (
             f"👤 Person {i} Details\n"
@@ -324,7 +283,6 @@ async def set_admin_commands(app):
 
     await app.bot.set_my_commands(
         [
-            BotCommand("admin", "Broadcast message"),
             BotCommand("approve", "Approve user"),
             BotCommand("ban", "Ban user"),
             BotCommand("delete", "Delete / reset user"),
@@ -341,7 +299,6 @@ def main():
     app = ApplicationBuilder().token(token).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CommandHandler("delete", delete_user))
