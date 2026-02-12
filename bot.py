@@ -120,11 +120,17 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(APPROVED_FILE, approved_users)
     save_json(PENDING_FILE, pending_users)
 
-    await update.message.reply_text(f"✅ Approved:\n{user_text(uid, approved_users[uid])}")
+    await update.message.reply_text(
+        f"✅ Approved:\n{user_text(uid, approved_users[uid])}"
+    )
 
     await context.bot.send_message(
         chat_id=int(uid),
-        text="✅ Owner approved you!\n\nSend /start to begin."
+        text=(
+            "✅ Owner approved you!\n\n"
+            "🎉 Now you can use this bot.\n"
+            "📱 Send /start to begin."
+        )
     )
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -144,7 +150,11 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(PENDING_FILE, pending_users)
     save_json(BANNED_FILE, banned_users)
 
-    await update.message.reply_text(f"🚫 Banned:\n{user_text(uid, info)}")
+    await update.message.reply_text(
+        f"🚫 Banned:\n{user_text(uid, info)}"
+    )
+
+# ================= BROADCAST =================
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
@@ -154,54 +164,34 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ADMIN_BROADCAST_MODE = True
     await update.message.reply_text(
-        "📢 Broadcast Mode\n\nSend message to broadcast."
+        "📢 Admin Broadcast Mode\n\n"
+        "✍️ Send the message you want to broadcast to all approved users."
     )
-
-async def approved_list(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not approved_users:
-        await update.message.reply_text("No approved users.")
-        return
-
-    msg = "✅ Approved Users:\n\n"
-    for uid, info in approved_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
-
-async def pending_list(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not pending_users:
-        await update.message.reply_text("No pending users.")
-        return
-
-    msg = "⏳ Pending Users:\n\n"
-    for uid, info in pending_users.items():
-        msg += user_text(uid, info) + "\n\n"
-
-    await update.message.reply_text(msg)
 
 # ================= MESSAGE HANDLER =================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
 
-    # Broadcast
+    # Broadcast mode
     if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
+        sent = 0
 
         for uid in approved_users:
             try:
-                await context.bot.send_message(int(uid), f"📢 Announcement\n\n{text}")
+                await context.bot.send_message(
+                    chat_id=int(uid),
+                    text=f"📢 Announcement\n\n{text}"
+                )
+                sent += 1
             except:
                 pass
 
-        await update.message.reply_text("✅ Broadcast sent.")
+        await update.message.reply_text(
+            f"✅ Broadcast sent to {sent} approved users."
+        )
         return
 
     uid = str(update.effective_user.id)
@@ -218,64 +208,78 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json"
-        }
+        response = requests.get(API_URL + number, timeout=30)
+        status_code = response.status_code
 
-        response = requests.get(API_URL + number, headers=headers, timeout=30)
-
-        try:
-            data = response.json()
-        except:
-            await update.message.reply_text(f"❌ HTTP {response.status_code}\n\n{response.text}")
+        if status_code != 200:
+            await update.message.reply_text(
+                f"❌ HTTP {status_code} - Internal Server Error\n\n🤖 Bot Made by @Mafiakabaap"
+            )
             return
 
+        data = response.json()
+
     except Exception as e:
-        await update.message.reply_text(f"❌ {str(e)}")
+        await update.message.reply_text(
+            f"❌ Server error\n\n🤖 Bot Made by @Mafiakabaap"
+        )
         return
 
-    # If API returns server error JSON
+    # If API says no data
     if not data.get("success"):
-        await update.message.reply_text(json.dumps(data, indent=2))
+        await update.message.reply_text(
+            f"❌ {data.get('message','No data found')}\n\n🤖 Bot Made by @Mafiakabaap"
+        )
         return
 
-    # Handle nested result
-    result_data = data.get("result")
+    results = data.get("result", [])
 
-    if isinstance(result_data, dict):
-        result_list = result_data.get("result", [])
-    else:
-        result_list = result_data
-
-    if not result_list:
-        await update.message.reply_text("❌ No data found.")
+    if not results:
+        await update.message.reply_text(
+            f"❌ No data found.\n\n🤖 Bot Made by @Mafiakabaap"
+        )
         return
 
-    # Send RAW JSON like other bot
-    await update.message.reply_text(
-        json.dumps(data, indent=2),
-        disable_web_page_preview=True
-    )
+    msg = ""
+
+    for i, p in enumerate(results, 1):
+        email_raw = p.get("EMAIL")
+        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
+
+        msg += (
+            f"👤 Person {i} Details\n"
+            f"Name : {p.get('NAME','')}\n"
+            f"Father Name : {p.get('FATHER_NAME','')}\n"
+            f"Address : {p.get('ADDRESS','').replace('!', ', ')}\n"
+            f"Sim : {p.get('CIRCLE/SIM','')}\n"
+            f"Mobile No. : {p.get('MOBILE','')}\n"
+            f"Alternative No. : {p.get('ALTERNATIVE_MOBILE','')}\n"
+            f"Aadhaar No. : {p.get('AADHAR_NUMBER','')}\n"
+            f"Email ID : {email_text}\n\n"
+        )
+
+    msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
+
+    await update.message.reply_text(msg)
 
 # ================= COMMAND MENU =================
 
 async def set_admin_commands(app):
-    # Default users
+
+    # /start visible to all
     await app.bot.set_my_commands(
-        [
-            BotCommand("start", "Start the bot")
-        ],
+        [BotCommand("start", "Start the bot")],
         scope=BotCommandScopeDefault()
     )
 
-    # Admin menu (START FIRST)
+    # Admin menu (start first)
     await app.bot.set_my_commands(
         [
             BotCommand("start", "Start the bot"),
             BotCommand("admin", "Broadcast message"),
             BotCommand("approve", "Approve user"),
             BotCommand("ban", "Ban user"),
+            BotCommand("delete", "Delete / reset user"),
             BotCommand("approved", "Approved users"),
             BotCommand("pending", "Pending users"),
         ],
@@ -292,8 +296,6 @@ def main():
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("approved", approved_list))
-    app.add_handler(CommandHandler("pending", pending_list))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.post_init = set_admin_commands
