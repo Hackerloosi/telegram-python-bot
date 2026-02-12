@@ -173,11 +173,9 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
 
-    # Broadcast mode
     if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
-
         sent = 0
         for uid in approved_users:
             try:
@@ -208,18 +206,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        response = requests.get(API_URL + number, timeout=30)
-        data = response.json()
+        resp = requests.get(API_URL + number, timeout=30)
+        data = resp.json()
     except:
         await update.message.reply_text("❌ API error.")
         return
 
-    if not isinstance(data, dict) or not data.get("success") or not data.get("result"):
+    if not data.get("success"):
+        await update.message.reply_text("❌ No data found.")
+        return
+
+    # Support both API formats
+    if isinstance(data.get("result"), dict):
+        records = data["result"].get("result", [])
+    else:
+        records = data.get("result", [])
+
+    if not records:
         await update.message.reply_text("❌ No data found.")
         return
 
     msg = ""
-    for i, p in enumerate(data["result"], 1):
+    for i, p in enumerate(records, 1):
         email_raw = p.get("EMAIL")
         email_text = (
             email_raw.strip().lower()
