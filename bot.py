@@ -126,11 +126,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=int(uid),
-        text=(
-            "✅ Owner approved you!\n\n"
-            "🎉 Now you can use this bot.\n"
-            "📱 Send /start to begin."
-        )
+        text="✅ Owner approved you!\n\n🎉 Now you can use this bot.\n📱 Send /start to begin."
     )
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,8 +134,8 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     uid = context.args[0]
-
     info = approved_users.pop(uid, None) or pending_users.pop(uid, None)
+
     if not info:
         await update.message.reply_text("User not found.")
         return
@@ -150,9 +146,7 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(PENDING_FILE, pending_users)
     save_json(BANNED_FILE, banned_users)
 
-    await update.message.reply_text(
-        f"🚫 Banned:\n{user_text(uid, info)}"
-    )
+    await update.message.reply_text(f"🚫 Banned:\n{user_text(uid, info)}")
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
@@ -163,7 +157,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ADMIN_BROADCAST_MODE = True
     await update.message.reply_text(
         "📢 Admin Broadcast Mode\n\n"
-        "✍️ Send the message you want to broadcast to all approved users."
+        "Send the message you want to broadcast to all approved users."
     )
 
 async def approved_list(update, context):
@@ -199,6 +193,7 @@ async def pending_list(update, context):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
 
+    # Broadcast Mode
     if update.effective_user.id == ADMIN_ID and ADMIN_BROADCAST_MODE:
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
@@ -214,9 +209,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-        await update.message.reply_text(
-            f"✅ Broadcast sent to {sent} approved users."
-        )
+        await update.message.reply_text(f"✅ Broadcast sent to {sent} users.")
         return
 
     uid = str(update.effective_user.id)
@@ -233,61 +226,61 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json"
-        }
+        response = requests.get(API_URL + number, timeout=30)
 
-        resp = requests.get(API_URL + number, headers=headers, timeout=30)
-
-        if resp.status_code != 200:
-            await update.message.reply_text(f"❌ API HTTP Error: {resp.status_code}")
+        if response.status_code != 200:
+            await update.message.reply_text(
+                f"❌ HTTP {response.status_code} - {response.reason}"
+            )
             return
 
-        data = resp.json()
+        data = response.json()
 
     except Exception as e:
-        await update.message.reply_text(f"❌ API Exception:\n{str(e)}")
+        await update.message.reply_text(f"❌ {str(e)}")
         return
 
-    if not data.get("success"):
-        await update.message.reply_text("❌ No data found.")
+    # If API says success false → show message exactly
+    if data.get("success") is False:
+        await update.message.reply_text(f"❌ {data.get('message', 'Server error')}")
         return
 
-    result_data = data.get("result")
+    # If success true → format data
+    if data.get("success") is True:
 
-    # Handle nested format
-    if isinstance(result_data, dict) and "result" in result_data:
-        result_data = result_data["result"]
+        results = data.get("result")
 
-    if not result_data:
-        await update.message.reply_text("❌ No data found.")
+        if not isinstance(results, list) or not results:
+            await update.message.reply_text("❌ No data found.")
+            return
+
+        msg = ""
+
+        for i, p in enumerate(results, 1):
+            email_raw = p.get("EMAIL")
+            email_text = (
+                email_raw.strip().lower()
+                if isinstance(email_raw, str) and email_raw.strip()
+                else "Email Not Found ❌"
+            )
+
+            msg += (
+                f"👤 Person {i} Details\n"
+                f"Name : {p.get('NAME','')}\n"
+                f"Father Name : {p.get('FATHER_NAME','')}\n"
+                f"Address : {p.get('ADDRESS','').replace('!', ', ')}\n"
+                f"Sim : {p.get('CIRCLE/SIM','')}\n"
+                f"Mobile No. : {p.get('MOBILE','')}\n"
+                f"Alternative No. : {p.get('ALTERNATIVE_MOBILE','')}\n"
+                f"Aadhaar No. : {p.get('AADHAR_NUMBER','')}\n"
+                f"Email ID : {email_text}\n\n"
+            )
+
+        msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
+        await update.message.reply_text(msg)
         return
 
-    msg = ""
-
-    for i, p in enumerate(result_data, 1):
-        email_raw = p.get("EMAIL")
-        email_text = (
-            email_raw.strip().lower()
-            if isinstance(email_raw, str) and email_raw.strip()
-            else "Email Not Found ❌"
-        )
-
-        msg += (
-            f"👤 Person {i} Details\n"
-            f"Name : {p.get('NAME','')}\n"
-            f"Father Name : {p.get('FATHER_NAME','')}\n"
-            f"Address : {p.get('ADDRESS','').replace('!', ', ')}\n"
-            f"Sim : {p.get('CIRCLE/SIM','')}\n"
-            f"Mobile No. : {p.get('MOBILE','')}\n"
-            f"Alternative No. : {p.get('ALTERNATIVE_MOBILE','')}\n"
-            f"Aadhaar No. : {p.get('AADHAR_NUMBER','')}\n"
-            f"Email ID : {email_text}\n\n"
-        )
-
-    msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
-    await update.message.reply_text(msg)
+    await update.message.reply_text("❌ Unexpected API response.")
 
 # ================= COMMAND MENU =================
 
