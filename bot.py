@@ -126,7 +126,11 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=int(uid),
-        text="✅ Owner approved you!\n\n🎉 Now you can use this bot.\n📱 Send /start to begin."
+        text=(
+            "✅ Owner approved you!\n\n"
+            "🎉 Now you can use this bot.\n"
+            "📱 Send /start to begin."
+        )
     )
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -134,8 +138,8 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     uid = context.args[0]
-    info = approved_users.pop(uid, None) or pending_users.pop(uid, None)
 
+    info = approved_users.pop(uid, None) or pending_users.pop(uid, None)
     if not info:
         await update.message.reply_text("User not found.")
         return
@@ -146,9 +150,9 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(PENDING_FILE, pending_users)
     save_json(BANNED_FILE, banned_users)
 
-    await update.message.reply_text(f"🚫 Banned:\n{user_text(uid, info)}")
-
-# ================= BROADCAST =================
+    await update.message.reply_text(
+        f"🚫 Banned:\n{user_text(uid, info)}"
+    )
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
@@ -158,7 +162,8 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ADMIN_BROADCAST_MODE = True
     await update.message.reply_text(
-        "📢 Admin Broadcast Mode\n\nSend the message you want to broadcast."
+        "📢 Admin Broadcast Mode\n\n"
+        "✍️ Send the message you want to broadcast to all approved users."
     )
 
 async def approved_list(update, context):
@@ -189,54 +194,7 @@ async def pending_list(update, context):
 
     await update.message.reply_text(msg)
 
-# ================= DELETE =================
-
-async def delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    all_users = {}
-    all_users.update(approved_users)
-    all_users.update(pending_users)
-    all_users.update(banned_users)
-
-    if not all_users:
-        await update.message.reply_text("No users found.")
-        return
-
-    buttons = []
-    for uid, info in all_users.items():
-        uname = f"@{info['username']}" if info.get("username") else "NoUsername"
-        label = f"{info.get('name','User')} ({uname})"
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"Delete {label}",
-                callback_data=f"delete:{uid}"
-            )
-        ])
-
-    await update.message.reply_text(
-        "🗑️ Delete User (Reset to New):",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-
-async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    uid = query.data.split(":")[1]
-
-    approved_users.pop(uid, None)
-    pending_users.pop(uid, None)
-    banned_users.pop(uid, None)
-
-    save_json(APPROVED_FILE, approved_users)
-    save_json(PENDING_FILE, pending_users)
-    save_json(BANNED_FILE, banned_users)
-
-    await query.edit_message_text(f"🗑️ User deleted\nID: {uid}")
-
-# ================= MESSAGE =================
+# ================= MESSAGE HANDLER =================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_BROADCAST_MODE
@@ -245,13 +203,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ADMIN_BROADCAST_MODE = False
         text = update.message.text
         sent = 0
+
         for uid in approved_users:
             try:
-                await context.bot.send_message(int(uid), f"📢 Announcement\n\n{text}")
+                await context.bot.send_message(
+                    chat_id=int(uid),
+                    text=f"📢 Announcement\n\n{text}"
+                )
                 sent += 1
             except:
                 pass
-        await update.message.reply_text(f"✅ Broadcast sent to {sent} users.")
+
+        await update.message.reply_text(
+            f"✅ Broadcast sent to {sent} approved users."
+        )
         return
 
     uid = str(update.effective_user.id)
@@ -268,32 +233,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Fetching details, please wait...")
 
     try:
-        resp = requests.get(API_URL + number, timeout=30)
-        resp.raise_for_status()
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        }
+
+        resp = requests.get(API_URL + number, headers=headers, timeout=30)
+
+        if resp.status_code != 200:
+            await update.message.reply_text(f"❌ API HTTP Error: {resp.status_code}")
+            return
+
         data = resp.json()
-    except:
-        await update.message.reply_text("❌ API error.")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ API Exception:\n{str(e)}")
         return
 
     if not data.get("success"):
         await update.message.reply_text("❌ No data found.")
         return
 
-    records = []
+    result_data = data.get("result")
 
-    if isinstance(data.get("result"), list):
-        records = data["result"]
-    elif isinstance(data.get("result"), dict):
-        records = data["result"].get("result", [])
+    # Handle nested format
+    if isinstance(result_data, dict) and "result" in result_data:
+        result_data = result_data["result"]
 
-    if not records:
+    if not result_data:
         await update.message.reply_text("❌ No data found.")
         return
 
     msg = ""
-    for i, p in enumerate(records, 1):
+
+    for i, p in enumerate(result_data, 1):
         email_raw = p.get("EMAIL")
-        email_text = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else "Email Not Found ❌"
+        email_text = (
+            email_raw.strip().lower()
+            if isinstance(email_raw, str) and email_raw.strip()
+            else "Email Not Found ❌"
+        )
 
         msg += (
             f"👤 Person {i} Details\n"
@@ -310,7 +289,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg += "━━━━━━━━━━━━━━\n🤖 Bot Made by @Mafiakabaap"
     await update.message.reply_text(msg)
 
-# ================= MENU =================
+# ================= COMMAND MENU =================
 
 async def set_admin_commands(app):
     await app.bot.set_my_commands(
@@ -324,7 +303,6 @@ async def set_admin_commands(app):
             BotCommand("admin", "Broadcast message"),
             BotCommand("approve", "Approve user"),
             BotCommand("ban", "Ban user"),
-            BotCommand("delete", "Delete user"),
             BotCommand("approved", "Approved users"),
             BotCommand("pending", "Pending users"),
         ],
@@ -341,10 +319,8 @@ def main():
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("delete", delete_user))
     app.add_handler(CommandHandler("approved", approved_list))
     app.add_handler(CommandHandler("pending", pending_list))
-    app.add_handler(CallbackQueryHandler(delete_callback, pattern="^delete:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.post_init = set_admin_commands
